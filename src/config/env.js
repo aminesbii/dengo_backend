@@ -8,7 +8,6 @@ export const ENV = {
   PORT: 8000,
   DB_URL: process.env.DB_URL,
   ADMIN_EMAIL: process.env.ADMIN_EMAIL,
-  CLIENT_URL: process.env.CLIENT_URL,
   JWT_SECRET: process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production",
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || "7d",
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,

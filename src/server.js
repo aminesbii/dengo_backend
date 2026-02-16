@@ -22,22 +22,29 @@ const app = express();
 
 const __dirname = path.resolve();
 
-const allowedOrigins = [
-  ENV.CLIENT_URL
-].filter(Boolean);
+const allowedOrigins = [ENV.CLIENT_URL].filter(Boolean);
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Allow all origins in development
-    }
-  },
-  credentials: true,
-};
+let corsOptions;
+if (ENV.NODE_ENV === "production") {
+  // In production, only allow the configured CLIENT_URL
+  corsOptions = {
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  };
+} else {
+  // In non-production (staging/dev) allow all origins to avoid CORS blocking
+  corsOptions = {
+    origin: true,
+    credentials: true,
+  };
+}
 
 // special handling: Stripe webhook needs raw body BEFORE any body parsing middleware
 // apply raw body parser conditionally only to webhook endpoint
