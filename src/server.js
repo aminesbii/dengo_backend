@@ -23,9 +23,7 @@ const app = express();
 const __dirname = path.resolve();
 
 const allowedOrigins = [
-  ENV.CLIENT_URL,
-  "http://localhost:5173", // Admin panel default port
-  "http://localhost:5174", // Alternative admin port
+  ENV.CLIENT_URL
 ].filter(Boolean);
 
 const corsOptions = {
