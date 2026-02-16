@@ -10,14 +10,15 @@ COPY package*.json ./
 ENV NODE_ENV=production
 RUN npm ci --only=production
 
-# Ensure the runtime PORT matches the app default
-ENV PORT=5000
 
 # Copy source
 COPY . .
 
+# Ensure the runtime PORT matches the app default (Koyeb health check expects 8000)
+ENV PORT=8000
+
 # Expose application port (should match ENV.PORT)
-EXPOSE 5000
+EXPOSE 8000
 
 # Default command
 CMD ["node", "src/server.js"]
