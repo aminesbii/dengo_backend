@@ -93,8 +93,9 @@ if (ENV.NODE_ENV === "production") {
 
 const startServer = async () => {
   await connectDB();
-  app.listen(ENV.PORT, () => {
-    console.log("Server is up and running");
+  // bind to 0.0.0.0 so the server is reachable from outside the container
+  app.listen(ENV.PORT, "0.0.0.0", () => {
+    console.log(`Server is up and running on port ${ENV.PORT}`);
   });
 };
 

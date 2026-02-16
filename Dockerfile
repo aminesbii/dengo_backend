@@ -10,11 +10,14 @@ COPY package*.json ./
 ENV NODE_ENV=production
 RUN npm ci --only=production
 
+# Ensure the runtime PORT matches the app default
+ENV PORT=5000
+
 # Copy source
 COPY . .
 
-# Expose application port (should match ENV.PORT in .env)
-EXPOSE 3001
+# Expose application port (should match ENV.PORT)
+EXPOSE 5000
 
 # Default command
 CMD ["node", "src/server.js"]
