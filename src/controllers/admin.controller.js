@@ -90,6 +90,7 @@ export async function createProduct(req, res) {
       freeShipping,
       isDigital,
       status,
+      isFeatured,
       metaDescription,
       adminNotes,
       relatedProducts,
