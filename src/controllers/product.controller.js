@@ -4,6 +4,8 @@ import { ShopFollow } from "../models/shopFollow.model.js";
 import { Order } from "../models/order.model.js";
 import { User } from "../models/user.model.js";
 import { createBulkNotifications } from "./notification.controller.js";
+import { saveBase64Image } from "../lib/imageHelpers.js";
+import path from "path";
 // Helper to parse potential JSON strings from FormData
 const parseBody = (body) => {
   const parsed = { ...body };
@@ -30,16 +32,36 @@ export async function createProduct(req, res) {
 
     let images = [];
     if (req.files && req.files.length > 0) {
-      const { entity, folder } = req._upload || {};
-      const pathPrefix = entity && folder ? `/images/${entity}/${folder}` : '/images/uploads';
-
       const primaryIndex = parseInt(body.newImagePrimaryIndex) || 0; // Default to 0 if not provided
 
-      images = req.files.map((file, idx) => ({
-        url: `${pathPrefix}/${file.filename}`,
-        alt: body.name || "",
-        isPrimary: idx === primaryIndex
-      }));
+      images = req.files.map((file, idx) => {
+        const rel = path.relative(path.join(process.cwd(), "src"), file.path).split(path.sep).join("/");
+        return {
+          url: `/${rel}`,
+          alt: body.name || "",
+          isPrimary: idx === primaryIndex,
+        };
+      });
+    }
+
+    // Support base64 images sent in JSON (e.g. from mobile clients)
+    if ((!images || images.length === 0) && body.base64Images) {
+      let arr = body.base64Images;
+      if (typeof arr === "string") {
+        try { arr = JSON.parse(arr); } catch { arr = [arr]; }
+      }
+      if (Array.isArray(arr)) {
+        for (const b64 of arr) {
+          if (typeof b64 === "string" && b64.startsWith("data:image/")) {
+            try {
+              const saved = await saveBase64Image(b64, { base: 'products' });
+              images.push({ url: saved, alt: body.name || "", isPrimary: false });
+            } catch (err) {
+              console.warn("Failed to save base64 product image:", err.message || err);
+            }
+          }
+        }
+      }
     }
 
     const {
@@ -106,16 +128,36 @@ export async function updateProduct(req, res) {
     if (hasImageData) {
       let newImages = [];
       if (hasUploadedFiles) {
-        const { entity, folder } = req._upload || {};
-        const pathPrefix = entity && folder ? `/images/${entity}/${folder}` : '/images/uploads';
-
         const newPrimaryIndex = parseInt(body.newImagePrimaryIndex);
 
-        newImages = req.files.map((file, idx) => ({
-          url: `${pathPrefix}/${file.filename}`,
-          alt: body.name || "",
-          isPrimary: idx === newPrimaryIndex
-        }));
+        newImages = req.files.map((file, idx) => {
+          const rel = path.relative(path.join(process.cwd(), "src"), file.path).split(path.sep).join("/");
+          return {
+            url: `/${rel}`,
+            alt: body.name || "",
+            isPrimary: idx === newPrimaryIndex,
+          };
+        });
+      }
+
+      // If client provided base64 images (mobile clients may send these), save them
+      if (!hasUploadedFiles && body.base64Images) {
+        let arr = body.base64Images;
+        if (typeof arr === "string") {
+          try { arr = JSON.parse(arr); } catch { arr = [arr]; }
+        }
+        if (Array.isArray(arr)) {
+          for (const b64 of arr) {
+            if (typeof b64 === "string" && b64.startsWith("data:image/")) {
+              try {
+                const saved = await saveBase64Image(b64, { base: 'products' });
+                newImages.push({ url: saved, alt: body.name || "", isPrimary: false });
+              } catch (err) {
+                console.warn("Failed to save base64 product image:", err.message || err);
+              }
+            }
+          }
+        }
       }
 
       // Combine existing and new images

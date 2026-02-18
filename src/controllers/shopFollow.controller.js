@@ -36,6 +36,9 @@ export async function followShop(req, res) {
       shop: shop._id,
     });
 
+    // Update shop stats: increment totalFollowers
+    await Shop.findByIdAndUpdate(shopId, { $inc: { "stats.totalFollowers": 1 } });
+
     const followerCount = await ShopFollow.countDocuments({ shop: shopId });
 
     res.json({ success: true, message: "Followed successfully", followerCount });
@@ -55,6 +58,9 @@ export async function unfollowShop(req, res) {
     if (!result) {
       return res.status(404).json({ error: "Not following this shop" });
     }
+
+    // Update shop stats: decrement totalFollowers
+    await Shop.findByIdAndUpdate(shopId, { $inc: { "stats.totalFollowers": -1 } });
 
     const followerCount = await ShopFollow.countDocuments({ shop: shopId });
 

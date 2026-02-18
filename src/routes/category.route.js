@@ -9,6 +9,7 @@ import {
   reorderCategories,
 } from "../controllers/category.controller.js";
 import { protectRoute, adminOnly } from "../middleware/auth.middleware.js";
+import { upload } from "../middleware/multer.middleware.js";
 
 const router = Router();
 
@@ -18,8 +19,8 @@ router.get("/tree", getCategoryTree);
 router.get("/:id", getCategoryById);
 
 // Admin only routes
-router.post("/", protectRoute, adminOnly, createCategory);
-router.put("/:id", protectRoute, adminOnly, updateCategory);
+router.post("/", protectRoute, adminOnly, upload.single("image"), createCategory);
+router.put("/:id", protectRoute, adminOnly, upload.single("image"), updateCategory);
 router.delete("/:id", protectRoute, adminOnly, deleteCategory);
 router.post("/reorder", protectRoute, adminOnly, reorderCategories);
 

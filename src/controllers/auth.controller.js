@@ -4,6 +4,7 @@ import { generateToken, setTokenCookie, clearTokenCookie } from "../middleware/a
 import { sendVerificationEmail } from "../lib/mailer.js";
 import crypto from "crypto";
 import { ENV } from "../config/env.js";
+import { saveBase64Image } from "../lib/imageHelpers.js";
 
 /**
  * Register a new user
@@ -365,13 +366,20 @@ export async function updateProfile(req, res) {
       if (location.lng !== undefined) user.location.lng = location.lng;
     }
 
-    // Handle avatar upload via multer
+    // Handle avatar upload via multer or base64 payload
     if (req.file) {
       const relativePath = req.file.path
         .replace(process.cwd(), "")
         .replace(/\\/g, "/")
         .replace(/^\/?(src\/)?/, "/");
       user.imageUrl = relativePath;
+    } else if (typeof req.body.avatarBase64 === "string" && req.body.avatarBase64.startsWith("data:image/")) {
+      try {
+        const saved = await saveBase64Image(req.body.avatarBase64, { base: "users", sub: "profile" });
+        user.imageUrl = saved;
+      } catch (err) {
+        console.warn("Failed to save base64 avatar:", err.message || err);
+      }
     } else if (imageUrl !== undefined) {
       user.imageUrl = imageUrl;
     }

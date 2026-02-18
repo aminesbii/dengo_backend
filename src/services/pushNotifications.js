@@ -20,12 +20,12 @@ export async function sendPushToUser(recipientId, { title, body, data = {} }) {
     const messages = [
       {
         to: user.expoPushToken,
-        sound: "dengo_notification.wav",
+        sound: "default",
         title,
         body,
         data,
         priority: "high",
-        channelId: "dengo",
+        channelId: "default",
       },
     ];
 
@@ -59,12 +59,12 @@ export async function sendPushToUsers(recipientIds, { title, body, data = {} }) 
       .filter((u) => Expo.isExpoPushToken(u.expoPushToken))
       .map((u) => ({
         to: u.expoPushToken,
-        sound: "dengo_notification.wav",
+        sound: "default",
         title,
         body,
         data,
         priority: "high",
-        channelId: "dengo",
+        channelId: "default",
       }));
 
     if (messages.length === 0) return;

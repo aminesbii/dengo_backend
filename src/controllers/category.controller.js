@@ -1,5 +1,7 @@
 import Category from "../models/category.model.js";
 import { Product } from "../models/product.model.js";
+import path from "path";
+import { saveBase64Image, deleteLocalImage } from "../lib/imageHelpers.js";
 
 // ==================== GET ALL CATEGORIES ====================
 export const getAllCategories = async (req, res) => {
@@ -65,7 +67,7 @@ export const getCategoryById = async (req, res) => {
 // ==================== CREATE CATEGORY ====================
 export const createCategory = async (req, res) => {
   try {
-    const { name, description, image, icon, parent, displayOrder, attributes, metaTitle, metaDescription, isActive } = req.body;
+    const { name, description, image, imageBase64, icon, parent, displayOrder, attributes, metaTitle, metaDescription, isActive } = req.body;
 
     console.log("Creating category with data:", req.body);
 
@@ -93,10 +95,23 @@ export const createCategory = async (req, res) => {
       level = parentCategory.level + 1;
     }
 
+    // determine image value: uploaded file, base64, or provided URL
+    let imageVal = image;
+    if (req.file) {
+      const rel = path.relative(path.join(process.cwd(), "src"), req.file.path).split(path.sep).join("/");
+      imageVal = `/${rel}`;
+    } else if (imageBase64 && typeof imageBase64 === "string" && imageBase64.startsWith("data:image/")) {
+      try {
+        imageVal = await saveBase64Image(imageBase64, { base: "categories", sub: "" });
+      } catch (err) {
+        console.warn("Failed to save base64 category image:", err.message || err);
+      }
+    }
+
     const category = await Category.create({
       name,
       description,
-      image,
+      image: imageVal,
       icon,
       parent: parent || null,
       level,
@@ -127,6 +142,9 @@ export const updateCategory = async (req, res) => {
     }
 
     // If changing parent, update level
+    // Normalize empty-string parent values (FormData sends "" for empty selects)
+    if (updates.parent === "" || updates.parent === "null") updates.parent = null;
+
     if (updates.parent !== undefined && updates.parent !== category.parent?.toString()) {
       if (updates.parent) {
         const newParent = await Category.findById(updates.parent);
@@ -152,6 +170,32 @@ export const updateCategory = async (req, res) => {
       "metaTitle",
       "metaDescription",
     ];
+
+    // handle image update: if new file uploaded or base64 provided, delete old local image and set new
+    if (req.file || updates.imageBase64) {
+      // delete existing local image if present
+      if (category.image && typeof category.image === "string" && category.image.startsWith("/")) {
+        await deleteLocalImage(category.image);
+      }
+      if (req.file) {
+        const rel = path.relative(path.join(process.cwd(), "src"), req.file.path).split(path.sep).join("/");
+        updates.image = `/${rel}`;
+      } else if (updates.imageBase64 && typeof updates.imageBase64 === "string" && updates.imageBase64.startsWith("data:image/")) {
+        try {
+          updates.image = await saveBase64Image(updates.imageBase64, { base: "categories", sub: "" });
+        } catch (err) {
+          console.warn("Failed to save base64 category image:", err.message || err);
+        }
+      }
+    }
+
+    // support removing image by setting image to empty string or null
+    if (updates.image === "" || updates.image === null) {
+      if (category.image && typeof category.image === "string" && category.image.startsWith("/")) {
+        await deleteLocalImage(category.image);
+      }
+      updates.image = "";
+    }
 
     allowedUpdates.forEach((field) => {
       if (updates[field] !== undefined) {
@@ -203,6 +247,13 @@ export const deleteCategory = async (req, res) => {
       });
 
       // 2. Delete all categories and subcategories
+      // delete images for each category before deleting docs
+      for (const cid of allAffectedCategoryIds) {
+        const c = await Category.findById(cid).select('image');
+        if (c && c.image && typeof c.image === 'string' && c.image.startsWith('/')) {
+          await deleteLocalImage(c.image);
+        }
+      }
       await Category.deleteMany({ _id: { $in: allAffectedCategoryIds } });
 
       return res.json({
@@ -255,6 +306,10 @@ export const deleteCategory = async (req, res) => {
       }
     }
 
+    // delete category image if exists
+    if (category.image && typeof category.image === 'string' && category.image.startsWith('/')) {
+      await deleteLocalImage(category.image);
+    }
     await Category.findByIdAndDelete(id);
 
     res.json({ success: true, message: "Category deleted successfully" });

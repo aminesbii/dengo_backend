@@ -2,6 +2,7 @@ import Shop from "../models/shop.model.js";
 import { User } from "../models/user.model.js";
 import path from "path";
 import fs from "fs";
+import { createNotification } from "./notification.controller.js";
 
 const deleteLocalImage = async (imageUrl) => {
   try {
@@ -205,12 +206,12 @@ export const adminCreateShop = async (req, res) => {
       let changed = false;
       if (req.files.logo && req.files.logo[0]) {
         const rel = path.relative(path.join(process.cwd(), "src"), req.files.logo[0].path).split(path.sep).join("/");
-        shop.logo = `${baseUrl}/${rel}`;
+        shop.logo = `/${rel}`;
         changed = true;
       }
       if (req.files.banner && req.files.banner[0]) {
         const rel = path.relative(path.join(process.cwd(), "src"), req.files.banner[0].path).split(path.sep).join("/");
-        shop.banner = `${baseUrl}/${rel}`;
+        shop.banner = `/${rel}`;
         changed = true;
       }
       if (changed) await shop.save();
@@ -218,16 +219,15 @@ export const adminCreateShop = async (req, res) => {
 
     // handle uploaded logo/banner files
     if (req.files) {
-      const baseUrl = `${req.protocol}://${req.get("host")}`;
       let changed = false;
       if (req.files.logo && req.files.logo[0]) {
         const rel = path.relative(path.join(process.cwd(), "src"), req.files.logo[0].path).split(path.sep).join("/");
-        shop.logo = `${baseUrl}/${rel}`;
+        shop.logo = `/${rel}`;
         changed = true;
       }
       if (req.files.banner && req.files.banner[0]) {
         const rel = path.relative(path.join(process.cwd(), "src"), req.files.banner[0].path).split(path.sep).join("/");
-        shop.banner = `${baseUrl}/${rel}`;
+        shop.banner = `/${rel}`;
         changed = true;
       }
       if (changed) await shop.save();
@@ -275,6 +275,15 @@ export const approveShop = async (req, res) => {
     await User.findByIdAndUpdate(shop.owner, { role: "vendor" });
 
     await shop.save();
+
+    // Notify the owner that their shop has been approved
+    await createNotification({
+      recipient: shop.owner,
+      type: "shop_approval",
+      title: "Store Approved!",
+      message: `Congratulations! Your shop "${shop.name}" has been approved by the admin. You can now start adding products.`,
+      shop: shop._id,
+    });
 
     res.json({ success: true, message: "Shop approved successfully", shop });
   } catch (error) {
@@ -468,7 +477,7 @@ export const updateShop = async (req, res) => {
           }
         }
         const rel = path.relative(path.join(process.cwd(), "src"), req.files.logo[0].path).split(path.sep).join("/");
-        shop.logo = `${baseUrl}/${rel}`;
+        shop.logo = `/${rel}`;
       }
       if (req.files.banner && req.files.banner[0]) {
         if (shop.banner) {
@@ -479,7 +488,7 @@ export const updateShop = async (req, res) => {
           }
         }
         const rel = path.relative(path.join(process.cwd(), "src"), req.files.banner[0].path).split(path.sep).join("/");
-        shop.banner = `${baseUrl}/${rel}`;
+        shop.banner = `/${rel}`;
       }
     }
     await shop.save();
@@ -817,7 +826,7 @@ export const updateMyShop = async (req, res) => {
           }
         }
         const rel = path.relative(path.join(process.cwd(), "src"), req.files.logo[0].path).split(path.sep).join("/");
-        shop.logo = `${baseUrl}/${rel}`;
+        shop.logo = `/${rel}`;
       }
       if (req.files.banner && req.files.banner[0]) {
         if (shop.banner) {
@@ -828,7 +837,7 @@ export const updateMyShop = async (req, res) => {
           }
         }
         const rel = path.relative(path.join(process.cwd(), "src"), req.files.banner[0].path).split(path.sep).join("/");
-        shop.banner = `${baseUrl}/${rel}`;
+        shop.banner = `/${rel}`;
       }
     }
 
@@ -1020,10 +1029,11 @@ export const getMyShopCustomers = async (req, res) => {
   }
 };
 
-// Get vendor shop analytics
+// Get vendor shop analytics with period support
 export const getMyShopAnalytics = async (req, res) => {
   try {
     const shop = await Shop.findOne({ owner: req.user._id });
+    const { period = "month" } = req.query; // period: day, week, month, year
 
     if (!shop) {
       return res.status(404).json({ error: "You don't have a shop yet" });
@@ -1039,18 +1049,76 @@ export const getMyShopAnalytics = async (req, res) => {
     const products = await Product.find({ vendor: shop._id });
     const productIds = products.map((p) => p._id);
 
-    // ─── Revenue by Month (last 6 months) from actual Orders ──────────
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    sixMonthsAgo.setDate(1);
-    sixMonthsAgo.setHours(0, 0, 0, 0);
+    // ─── Determine date range based on period ──────────────────────────
+    let dateRangeStart = new Date();
+    let dataPoints = [];
+    let labelFormat = (date) => date.toLocaleDateString();
 
+    if (period === "day") {
+      // Last 24 hours, 12 data points (every 2 hours)
+      dateRangeStart = new Date();
+      dateRangeStart.setHours(dateRangeStart.getHours() - 24);
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(dateRangeStart);
+        d.setHours(d.getHours() + i * 2);
+        dataPoints.push(d);
+      }
+      labelFormat = (date) => {
+        const h = String(date.getHours()).padStart(2, '0');
+        const m = String(date.getMinutes()).padStart(2, '0');
+        return `${h}:${m}`;
+      };
+    } else if (period === "week") {
+      // Last 7 days
+      dateRangeStart = new Date();
+      dateRangeStart.setDate(dateRangeStart.getDate() - 7);
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(dateRangeStart);
+        d.setDate(d.getDate() + i);
+        d.setHours(0, 0, 0, 0);
+        dataPoints.push(d);
+      }
+      labelFormat = (date) => {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return days[date.getDay()];
+      };
+    } else if (period === "month") {
+      // Last 30 days
+      dateRangeStart = new Date();
+      dateRangeStart.setDate(dateRangeStart.getDate() - 30);
+      for (let i = 0; i < 30; i++) {
+        const d = new Date(dateRangeStart);
+        d.setDate(d.getDate() + i);
+        d.setHours(0, 0, 0, 0);
+        dataPoints.push(d);
+      }
+      labelFormat = (date) => date.getDate().toString();
+    } else if (period === "year") {
+      // Last 12 months
+      dateRangeStart = new Date();
+      dateRangeStart.setFullYear(dateRangeStart.getFullYear() - 1);
+      dateRangeStart.setDate(1);
+      dateRangeStart.setHours(0, 0, 0, 0);
+      for (let i = 0; i < 12; i++) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - (11 - i));
+        d.setDate(1);
+        d.setHours(0, 0, 0, 0);
+        dataPoints.push(d);
+      }
+      labelFormat = (date) => {
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return months[date.getMonth()];
+      };
+    }
+
+    // ─── Fetch orders in the date range ────────────────────────────────
     const orders = await Order.find({
       "orderItems.product": { $in: productIds },
-      createdAt: { $gte: sixMonthsAgo },
+      createdAt: { $gte: dateRangeStart },
     }).lean();
 
-    // Build a map: monthKey -> revenue
+    // Build a map for revenue by date
     const revenueMap = {};
     const customerSet = new Set();
     let totalRevenue = 0;
@@ -1067,27 +1135,44 @@ export const getMyShopAnalytics = async (req, res) => {
       if (order.user) customerSet.add(order.user.toString());
 
       const orderDate = new Date(order.createdAt);
-      const monthKey = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}`;
-      const itemRevenue = vendorItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      let dateKey;
 
-      revenueMap[monthKey] = (revenueMap[monthKey] || 0) + itemRevenue;
+      if (period === "day") {
+        const h = Math.floor(orderDate.getHours() / 2) * 2;
+        dateKey = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate(), h, 0, 0, 0).getTime();
+      } else if (period === "week" || period === "month") {
+        dateKey = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate(), 0, 0, 0, 0).getTime();
+      } else {
+        // year
+        dateKey = new Date(orderDate.getFullYear(), orderDate.getMonth(), 1, 0, 0, 0, 0).getTime();
+      }
+
+      const itemRevenue = vendorItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      revenueMap[dateKey] = (revenueMap[dateKey] || 0) + itemRevenue;
       totalRevenue += itemRevenue;
     }
     totalOrderCount = orderIdSet.size;
 
-    // Build the 6-month array with actual data
-    const revenueByMonth = [];
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - i);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      revenueByMonth.push({
-        month: monthKey,
-        revenue: revenueMap[monthKey] || 0,
-      });
-    }
+    // Build revenue data array with all data points
+    const revenueData = dataPoints.map((datePoint) => {
+      let dateKey;
+      if (period === "day") {
+        const h = Math.floor(datePoint.getHours() / 2) * 2;
+        dateKey = new Date(datePoint.getFullYear(), datePoint.getMonth(), datePoint.getDate(), h, 0, 0, 0).getTime();
+      } else if (period === "week" || period === "month") {
+        dateKey = new Date(datePoint.getFullYear(), datePoint.getMonth(), datePoint.getDate(), 0, 0, 0, 0).getTime();
+      } else {
+        dateKey = new Date(datePoint.getFullYear(), datePoint.getMonth(), 1, 0, 0, 0, 0).getTime();
+      }
+      return {
+        x: dataPoints.indexOf(datePoint),
+        y: revenueMap[dateKey] || 0,
+        label: labelFormat(datePoint),
+        date: datePoint.toISOString(),
+      };
+    });
 
-    // ─── Also count all-time orders for totalCustomers ────────────────
+    // ─── Get all-time stats ─────────────────────────────────────────
     const allOrders = await Order.find({
       "orderItems.product": { $in: productIds },
     }).lean();
@@ -1181,7 +1266,8 @@ export const getMyShopAnalytics = async (req, res) => {
         uniqueCustomers: allCustomerSet.size,
         totalOrders: allTimeOrderCount,
         totalRevenue: allTimeRevenue,
-        revenueByMonth,
+        revenueData,
+        period,
         topCategories,
       },
     });

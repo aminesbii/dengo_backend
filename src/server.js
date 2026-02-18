@@ -17,6 +17,7 @@ import categoryRoutes from "./routes/category.route.js";
 import aiRoutes from "./routes/ai.route.js";
 import notificationRoutes from "./routes/notification.route.js";
 import shopFollowRoutes from "./routes/shopFollow.route.js";
+import { ensureImageFolders } from "./lib/imageHelpers.js";
 
 const app = express();
 
@@ -99,6 +100,8 @@ if (ENV.NODE_ENV === "production") {
 }
 
 const startServer = async () => {
+  // ensure image folders exist before accepting uploads
+  try { ensureImageFolders(); } catch (err) { console.warn("ensureImageFolders failed:", err); }
   await connectDB();
   // bind to 0.0.0.0 so the server is reachable from outside the container
   app.listen(ENV.PORT, "0.0.0.0", () => {

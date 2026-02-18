@@ -41,7 +41,18 @@ router.get("/shops", async (req, res) => {
       .populate("owner", "name imageUrl")
       .lean();
     const total = await Shop.countDocuments(query);
-    res.json({ data: shops, total });
+    // Normalize any relative image paths to absolute URLs so frontends can load them
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const normalized = shops.map((s) => {
+      const out = { ...s };
+      if (out.logo && typeof out.logo === "string" && out.logo.startsWith("/")) out.logo = `${baseUrl}${out.logo}`;
+      if (out.banner && typeof out.banner === "string" && out.banner.startsWith("/")) out.banner = `${baseUrl}${out.banner}`;
+      if (out.owner && out.owner.imageUrl && typeof out.owner.imageUrl === "string" && out.owner.imageUrl.startsWith("/")) {
+        out.owner.imageUrl = `${baseUrl}${out.owner.imageUrl}`;
+      }
+      return out;
+    });
+    res.json({ data: normalized, total });
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch shops", error: err.message });
   }

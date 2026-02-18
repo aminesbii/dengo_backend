@@ -97,6 +97,21 @@ export async function createOrder(req, res) {
         }
 
         await product.save();
+
+        // Check for low stock alert
+        if (product.trackInventory && product.stock <= (product.lowStockThreshold || 5)) {
+          const shop = await Shop.findById(product.vendor);
+          if (shop) {
+            await createNotification({
+              recipient: shop.owner,
+              type: "low_stock",
+              title: "Low Stock Alert",
+              message: `Product "${product.name}" is low on stock (${product.stock} left).`,
+              product: product._id,
+              shop: shop._id,
+            });
+          }
+        }
       }
     }
 
@@ -115,7 +130,7 @@ export async function createOrder(req, res) {
       }
     }
     for (const vendorId of Object.keys(vendorTotals)) {
-      await Shop.findByIdAndUpdate(
+      const shop = await Shop.findByIdAndUpdate(
         vendorId,
         {
           $inc: {
@@ -124,6 +139,18 @@ export async function createOrder(req, res) {
           },
         }
       );
+
+      // Notify the vendor about the new order
+      if (shop) {
+        await createNotification({
+          recipient: shop.owner,
+          type: "new_order",
+          title: "New Order Received!",
+          message: `You have received a new order (#${order._id.toString().slice(-6)}) for your shop "${shop.name}".`,
+          order: order._id,
+          shop: shop._id,
+        });
+      }
     }
 
     // Notify the user about the new order

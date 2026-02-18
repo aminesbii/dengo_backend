@@ -168,6 +168,7 @@ const shopSchema = new mongoose.Schema(
       totalRevenue: { type: Number, default: 0 },
       averageRating: { type: Number, default: 0 },
       totalReviews: { type: Number, default: 0 },
+      totalFollowers: { type: Number, default: 0 },
     },
 
     // Social Media Links

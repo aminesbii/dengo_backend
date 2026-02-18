@@ -32,8 +32,7 @@ export async function createCustomer(req, res) {
     let imageUrl = req.body.imageUrl || "";
     if (req.file) {
       const rel = path.relative(path.join(process.cwd(), "src"), req.file.path).split(path.sep).join("/");
-      const baseUrl = `${req.protocol}://${req.get("host")}`;
-      imageUrl = `${baseUrl}/${rel}`;
+      imageUrl = `/${rel}`;
     }
 
     if (!name || !email || !password) {
@@ -120,7 +119,7 @@ export async function createProduct(req, res) {
       images = req.files.map((file, index) => {
         // build public url relative to /src
         const rel = path.relative(path.join(process.cwd(), "src"), file.path).split(path.sep).join("/");
-        const url = `${baseUrl}/${rel}`; // e.g. http://localhost:5000/images/products/<folder>/file.jpg
+        const url = `/${rel}`;
         return { url, alt: name, isPrimary: index === 0 };
       });
     }
@@ -413,10 +412,9 @@ export async function updateProduct(req, res) {
 
     // Handle new images (saved by multer)
     if (req.files && req.files.length > 0) {
-      const baseUrl = `${req.protocol}://${req.get("host")}`;
       const newImages = req.files.map((file, index) => {
         const rel = path.relative(path.join(process.cwd(), "src"), file.path).split(path.sep).join("/");
-        const url = `${baseUrl}/${rel}`;
+        const url = `/${rel}`;
         return { url, alt: product.name, isPrimary: index === 0 && (!product.images || product.images.length === 0) };
       });
 
@@ -717,8 +715,7 @@ export async function updateCustomer(req, res) {
     if (req.file) {
       try {
         const rel = path.relative(path.join(process.cwd(), "src"), req.file.path).split(path.sep).join("/");
-        const baseUrl = `${req.protocol}://${req.get("host")}`;
-        customer.imageUrl = `${baseUrl}/${rel}`;
+        customer.imageUrl = `/${rel}`;
       } catch (err) {
         console.error("Error processing uploaded file path", err);
         return res.status(500).json({ error: "Failed to process uploaded file", details: err.message });
